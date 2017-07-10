@@ -1,4 +1,4 @@
-const int BUZZER_PIN = 9;
+const int BUZZER_PIN = 8;
 
 void setup() {
   // set buzzer pin to output mode
