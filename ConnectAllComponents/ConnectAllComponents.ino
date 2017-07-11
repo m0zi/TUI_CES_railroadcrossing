@@ -10,24 +10,24 @@ int const SERVO_PIN      =  9;
 int const CROSSING_LED_1 = 11;
 int const CROSSING_LED_2 = 12;
 
-// create servo object to control a servo
-Servo myservo;
+// gate speed constant: higher value = slower
+const int GATE_SPEED = 30;
+
+// buzzer beep speed: higher value = slower 
+const int BUZZER_SPEED = 250;
+
+// trigger value for IR sensor: higher value = more distance
+const int SENSOR_TRIGGER = 850;
 
 // servo's open and close position
 const int CLOSE_POS =  53;
 const int OPEN_POS  = 139;
-// gate speed constant: higher sensor1ue = slower
-const int GATE_SPEED = 30;
 
-// buzzer beep speed: higher sensor1ue = slower 
-const int BUZZER_SPEED = 250;
-
-// trigger value for IR sensor (the lower the value the closer the object must be)
-const int SENSOR_TRIGGER = 850;
+// create servo object to control a servo
+Servo myservo;
 
 // variable to store the servo position
 int pos = OPEN_POS;
-
 
 /*
  * trainState description
@@ -45,7 +45,7 @@ int       trainState  = TS_NO_TRAIN;
 /*
  * gateState description
  *  0 = gates open
- *  1 = warning phase
+ *  1 = warning phase before gate starts to close
  *  2 = gate closing
  *  2 = gate closed
  *  3 = gate opening
@@ -62,7 +62,7 @@ void setup() {
   
   // initialize servo
   myservo.attach(SERVO_PIN);  // attaches the servo on its defined pin to the servo object
-  myservo.write(pos);
+  myservo.write(pos);         // initialize position
 
   // initialize buzzer and crossing blink leds
   pinMode(BUZZER_PIN, OUTPUT);
@@ -71,7 +71,6 @@ void setup() {
 
   // initialize sensor and its debugging led
   analogReference(DEFAULT);         // Analog Reference of 5V is default, I know not needed.
-  //pinMode(SONSOR_LED_PIN, OUTPUT);  // set ledPin as output
   pinMode(SENSOR1_PIN, INPUT);       // set sensor pin as input
   pinMode(SENSOR2_PIN, INPUT);       // set sensor pin as input
   pinMode(SENSOR3_PIN, INPUT);       // set sensor pin as input
@@ -82,26 +81,33 @@ void setup() {
   digitalWrite(SENSOR4_PIN, HIGH);   // set pullup on sensor pin
 }
 
+// initialize sensor value
 int sensor1 = 0;
 int sensor2 = 0;
 int sensor3 = 0;
 int sensor4 = 0;
 
+// initialize sensor triggers
 bool sensor1Triggered = false;
 bool sensor2Triggered = false;
 bool sensor3Triggered = false;
 bool sensor4Triggered = false;
 
+// added delay for tone and blinking (or in closed state blinking only)
 int toneDelay      = 0;
+// counts the number of warning tones and blinkings
 int warningCounter = 0;
+// describes whether tone is one or of (also applies to binking state)
 bool toneOn        = false;
 
 void loop() {
+  // read all sensor values
   sensor1 = analogRead(SENSOR1_PIN);
   sensor2 = analogRead(SENSOR2_PIN);
   sensor3 = analogRead(SENSOR3_PIN);
   sensor4 = analogRead(SENSOR4_PIN);
-  
+
+  // decide trigger or not
   sensor1Triggered = sensor1 < SENSOR_TRIGGER;
   sensor2Triggered = sensor2 < SENSOR_TRIGGER;
   sensor3Triggered = sensor3 < SENSOR_TRIGGER;
@@ -114,7 +120,6 @@ void loop() {
       // if one of the entering sensor is triggered
       if(sensor1Triggered || sensor4Triggered) 
       {
-        // a train has entered the secured area
         Serial.println("trainState = TS_ENTERED");
         trainState = TS_ENTERED;
         close();
@@ -128,7 +133,7 @@ void loop() {
       }
       break;
     case TS_ENTERED:
-      // if one of the inside sensor is triggered 
+      // if one of the inside sensor is triggered while the entering is still triggered
       if(sensor2Triggered && !sensor1Triggered || sensor3Triggered && !sensor4Triggered)
       {
         Serial.println("trainState = TS_INSIDE");
@@ -176,6 +181,7 @@ void loop() {
       digitalWrite(CROSSING_LED_2,LOW);
       break;
     case GS_OPENING:
+      // open the gate
       if(pos <= OPEN_POS)
       {
         pos += 1;
@@ -197,6 +203,7 @@ void loop() {
           }
         }
       }
+      // gate is completely opened
       else
       {
         gateState = GS_OPEN;
@@ -204,9 +211,9 @@ void loop() {
       }
       break;
     case GS_WARNING:
+      // send warning signal...
       if(toneDelay > BUZZER_SPEED)
       {
-        // reset tone delay counter
         toneDelay = 0;
         if(toneOn)
         {
@@ -220,6 +227,7 @@ void loop() {
           toneOn = true;
         }
       }
+      // ... not more than twice
       if(warningCounter >= 2)
       {
         Serial.println("gateState = GS_CLOSING");
@@ -228,6 +236,7 @@ void loop() {
       }
       break;
     case GS_CLOSING:
+      // close the gate
       if(pos >= CLOSE_POS)
       {
         pos -= 1;
@@ -249,6 +258,7 @@ void loop() {
           }
         }
       }
+      // gate in completely closed
       else
       {
         Serial.println("gateState = GS_CLOSED");
@@ -258,10 +268,9 @@ void loop() {
     case GS_CLOSED:
       // stop sound...
       noTone(BUZZER_PIN);
-      // continue blinking
+      // continue blinking (no sound)
       if(toneDelay > BUZZER_SPEED)
       {
-        // reset tone delay counter
         toneDelay = 0;
         if(toneOn)
         {
@@ -278,8 +287,9 @@ void loop() {
       }
       break;      
     default:
-      error();
+      error();  // shouldn't happen
   }
+  // increase delay counter by gcd (kind of)
   toneDelay+=GATE_SPEED;  
   delay(GATE_SPEED);
 }
