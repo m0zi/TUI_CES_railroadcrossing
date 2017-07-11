@@ -1,15 +1,14 @@
 #include <Servo.h>
 
 // pin definitions
-int const SENSOR1_PIN     = A1;
-int const SENSOR2_PIN     = A2;
-int const SENSOR3_PIN     = A3;
-int const SENSOR4_PIN     = A4;
+int const SENSOR1_PIN     = A0;
+int const SENSOR2_PIN     = A1;
+int const SENSOR3_PIN     = A2;
+int const SENSOR4_PIN     = A3;
 int const BUZZER_PIN     =  8;
 int const SERVO_PIN      =  9;
 int const CROSSING_LED_1 = 11;
 int const CROSSING_LED_2 = 12;
-int const SONSOR_LED_PIN = 13;
 
 // create servo object to control a servo
 Servo myservo;
@@ -26,15 +25,16 @@ const int BUZZER_SPEED = 250;
 // trigger value for IR sensor (the lower the value the closer the object must be)
 const int SENSOR_TRIGGER = 850;
 
-int pos = OPEN_POS;    // variable to store the servo position
+// variable to store the servo position
+int pos = OPEN_POS;
 
 
 /*
  * trainState description
  *  0 = no train within controlled region
- *  1 = train entered first sensor, but not second
- *  2 = train entered first and second sensor
- *  3 = train left first sensor, but not second
+ *  1 = train entered secured area
+ *  2 = train is inside secured area
+ *  3 = train can only leave the area
 */
 const int TS_NO_TRAIN = 0;
 const int TS_ENTERED  = 1;
