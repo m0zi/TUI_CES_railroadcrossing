@@ -1,7 +1,10 @@
 #include <Servo.h>
 
 // pin definitions
-int const SENSOR_PIN     = A1;
+int const SENSOR1_PIN     = A1;
+int const SENSOR2_PIN     = A2;
+int const SENSOR3_PIN     = A3;
+int const SENSOR4_PIN     = A4;
 int const BUZZER_PIN     =  8;
 int const SERVO_PIN      =  9;
 int const CROSSING_LED_1 = 11;
@@ -14,24 +17,45 @@ Servo myservo;
 // servo's open and close position
 const int CLOSE_POS =  53;
 const int OPEN_POS  = 139;
-// gate speed constant: higher value = slower
+// gate speed constant: higher sensor1ue = slower
 const int GATE_SPEED = 30;
 
-// buzzer beep speed: higher value = slower 
+// buzzer beep speed: higher sensor1ue = slower 
 const int BUZZER_SPEED = 250;
+
+// trigger value for IR sensor (the lower the value the closer the object must be)
+const int SENSOR_TRIGGER = 850;
 
 int pos = OPEN_POS;    // variable to store the servo position
 
 
 /*
- * state description
- *  0 = gates open, no train within controlled region
- *  1 = train entered region, gates are about to close
- *  2 = train within region, gates closed
- *  3 = train left region, gates are opening
- * -1 = errornous state, system will reset
+ * trainState description
+ *  0 = no train within controlled region
+ *  1 = train entered first sensor, but not second
+ *  2 = train entered first and second sensor
+ *  3 = train left first sensor, but not second
 */
-int state = 0;
+const int TS_NO_TRAIN = 0;
+const int TS_ENTERED  = 1;
+const int TS_INSIDE   = 2;
+const int TS_LEAVING  = 3;
+int       trainState  = TS_NO_TRAIN;
+
+/*
+ * gateState description
+ *  0 = gates open
+ *  1 = warning phase
+ *  2 = gate closing
+ *  2 = gate closed
+ *  3 = gate opening
+*/
+const int GS_OPEN    = 0;
+const int GS_WARNING = 1;
+const int GS_CLOSING = 2;
+const int GS_CLOSED  = 3;
+const int GS_OPENING = 4;
+int gateState = GS_OPEN;
 
 void setup() {
   Serial.begin(9600);
@@ -47,45 +71,217 @@ void setup() {
 
   // initialize sensor and its debugging led
   analogReference(DEFAULT);         // Analog Reference of 5V is default, I know not needed.
-  pinMode(SONSOR_LED_PIN, OUTPUT);  // set ledPin as output
-  pinMode(SENSOR_PIN, INPUT);       // set sensor pin as input
-  digitalWrite(SENSOR_PIN, HIGH);   // set pullup on sensor pin
+  //pinMode(SONSOR_LED_PIN, OUTPUT);  // set ledPin as output
+  pinMode(SENSOR1_PIN, INPUT);       // set sensor pin as input
+  pinMode(SENSOR2_PIN, INPUT);       // set sensor pin as input
+  pinMode(SENSOR3_PIN, INPUT);       // set sensor pin as input
+  pinMode(SENSOR4_PIN, INPUT);       // set sensor pin as input
+  digitalWrite(SENSOR1_PIN, HIGH);   // set pullup on sensor pin
+  digitalWrite(SENSOR2_PIN, HIGH);   // set pullup on sensor pin
+  digitalWrite(SENSOR3_PIN, HIGH);   // set pullup on sensor pin
+  digitalWrite(SENSOR4_PIN, HIGH);   // set pullup on sensor pin
 }
 
-int val = 0;
+int sensor1 = 0;
+int sensor2 = 0;
+int sensor3 = 0;
+int sensor4 = 0;
+
+bool sensor1Triggered = false;
+bool sensor2Triggered = false;
+bool sensor3Triggered = false;
+bool sensor4Triggered = false;
+
+int toneDelay      = 0;
+int warningCounter = 0;
+bool toneOn        = false;
 
 void loop() {
-  val = analogRead(SENSOR_PIN);
+  sensor1 = analogRead(SENSOR1_PIN);
+  sensor2 = analogRead(SENSOR2_PIN);
+  sensor3 = analogRead(SENSOR3_PIN);
+  sensor4 = analogRead(SENSOR4_PIN);
+  
+  sensor1Triggered = sensor1 < SENSOR_TRIGGER;
+  sensor2Triggered = sensor2 < SENSOR_TRIGGER;
+  sensor3Triggered = sensor3 < SENSOR_TRIGGER;
+  sensor4Triggered = sensor4 < SENSOR_TRIGGER;
 
-  Serial.print("IR Sensor Value = ");
-  Serial.println(val);
-  Serial.println("");
-
-  switch(state)
+  // first check the train state
+  switch(trainState)
   {
-    case 0:
-      if(val < 750) 
+    case TS_NO_TRAIN:
+      // if one of the entering sensor is triggered
+      if(sensor1Triggered || sensor4Triggered) 
       {
-        digitalWrite(SONSOR_LED_PIN, HIGH);
+        // a train has entered the secured area
+        Serial.println("trainState = TS_ENTERED");
+        trainState = TS_ENTERED;
         close();
-        digitalWrite(CROSSING_LED_1,LOW);
-        digitalWrite(CROSSING_LED_2,LOW);
-        state = 2;
+        break;
+      }
+      // if one of the inside sensor is triggered 
+      if(sensor2Triggered || sensor3Triggered) 
+      {
+        // since the track should be free, this marks an error
+        error();
       }
       break;
-    case 2:
-      if(val > 750) 
+    case TS_ENTERED:
+      // if one of the inside sensor is triggered 
+      if(sensor2Triggered && !sensor1Triggered || sensor3Triggered && !sensor4Triggered)
       {
-        digitalWrite(SONSOR_LED_PIN, LOW);
+        Serial.println("trainState = TS_INSIDE");
+        trainState = TS_INSIDE;
+        break;
+      }
+      // if neither of the entering sensor is triggered
+      if(!sensor1Triggered && !sensor4Triggered)
+      {
+        // a train must have reversed and exited
+        Serial.println("trainState = TS_NO_TRAIN");
+        trainState = TS_NO_TRAIN;
         open();
-        digitalWrite(CROSSING_LED_1,LOW);
-        digitalWrite(CROSSING_LED_2,LOW);
-        state = 0;
+      }
+      break;
+    case TS_INSIDE:
+      if(sensor1Triggered || sensor4Triggered)
+      {
+        Serial.println("trainState = TS_LEAVING");
+        trainState = TS_LEAVING;
+      }
+      break;
+    case TS_LEAVING:
+      // if nothing is triggered anymore
+      if(!sensor1Triggered && !sensor2Triggered && !sensor3Triggered && !sensor4Triggered)
+      {
+        Serial.println("trainState = TS_NO_TRAIN");
+        trainState = TS_NO_TRAIN;
+        open();
       }
       break;
     default:
-      delay(15);
+      error();
   }
+
+  switch(gateState)
+  {
+    case GS_OPEN:
+      // stop sound...
+      noTone(BUZZER_PIN);
+      toneOn = false;
+      toneDelay = 0;
+      // turn off led
+      digitalWrite(CROSSING_LED_1,LOW);
+      digitalWrite(CROSSING_LED_2,LOW);
+      break;
+    case GS_OPENING:
+      if(pos <= OPEN_POS)
+      {
+        pos += 1;
+        myservo.write(pos);
+
+        if(toneDelay > BUZZER_SPEED)
+        {
+          // reset tone delay counter
+          toneDelay = 0;
+          if(toneOn)
+          {
+            noTone();
+            toneOn=false;
+          }
+          else
+          {
+            tone();
+            toneOn=true;
+          }
+        }
+      }
+      else
+      {
+        gateState = GS_OPEN;
+        Serial.println("gateState = GS_OPEN");
+      }
+      break;
+    case GS_WARNING:
+      if(toneDelay > BUZZER_SPEED)
+      {
+        // reset tone delay counter
+        toneDelay = 0;
+        if(toneOn)
+        {
+          noTone();
+          toneOn = false;
+          warningCounter++;
+        }
+        else
+        {
+          tone();
+          toneOn = true;
+        }
+      }
+      if(warningCounter >= 2)
+      {
+        Serial.println("gateState = GS_CLOSING");
+        gateState = GS_CLOSING;
+        warningCounter = 0;
+      }
+      break;
+    case GS_CLOSING:
+      if(pos >= CLOSE_POS)
+      {
+        pos -= 1;
+        myservo.write(pos);
+
+        if(toneDelay > BUZZER_SPEED)
+        {
+          // reset tone delay counter
+          toneDelay = 0;
+          if(toneOn)
+          {
+            noTone();
+            toneOn=false;
+          }
+          else
+          {
+            tone();
+            toneOn=true;
+          }
+        }
+      }
+      else
+      {
+        Serial.println("gateState = GS_CLOSED");
+        gateState = GS_CLOSED;
+      }
+      break;
+    case GS_CLOSED:
+      // stop sound...
+      noTone(BUZZER_PIN);
+      // continue blinking
+      if(toneDelay > BUZZER_SPEED)
+      {
+        // reset tone delay counter
+        toneDelay = 0;
+        if(toneOn)
+        {
+          digitalWrite(CROSSING_LED_1,LOW);
+          digitalWrite(CROSSING_LED_2,HIGH);
+          toneOn=false;
+        }
+        else
+        {
+          digitalWrite(CROSSING_LED_1,HIGH);
+          digitalWrite(CROSSING_LED_2,LOW);
+          toneOn=true;
+        }
+      }
+      break;      
+    default:
+      error();
+  }
+  toneDelay+=GATE_SPEED;  
+  delay(GATE_SPEED);
 }
 
 void tone()
@@ -107,97 +303,48 @@ void noTone()
 
 void open()
 {
-  // warning signal that crossing will close soon
-  int i;
-  for(i = 0; i < 2; i++)
+  switch(gateState)
   {
-    tone();
-    delay(BUZZER_SPEED);
-    noTone();
-    delay(BUZZER_SPEED);
-  }
-  
-  int toneDeplay = 0;
-  bool toneOn = true;
-  tone(BUZZER_PIN, 1000);           // send 1kHz signal...
-  for (; pos <= OPEN_POS; pos += 1)
-  {
-    myservo.write(pos);
-
-    // generate sound
-    if(toneDeplay > BUZZER_SPEED)
-    {
-      // reset tone delay counter
-      toneDeplay = 0;
-      if(toneOn)
-      {
-        noTone();
-        toneOn=false;
-      }
-      else
-      {
-        tone();
-        toneOn=true;
-      }
-    }
-    toneDeplay+=GATE_SPEED;
-    delay(GATE_SPEED);
-  }
-
-  // fading out
-  for(i = 0; i < 2; i++)
-  {
-    tone();
-    delay(BUZZER_SPEED);
-    noTone();
-    delay(BUZZER_SPEED);
+    case GS_OPEN:
+    case GS_OPENING:
+      break;
+    case GS_CLOSED:
+    case GS_WARNING:
+    case GS_CLOSING:
+      Serial.println("gateState = GS_OPENING");
+      gateState = GS_OPENING;
+      break;
+    default:
+      error();
   }
 }
 
 void close()
 {
-  // warning signal that crossing will close soon
-  int i;
-  for(i = 0; i < 2; i++)
+  switch(gateState)
   {
-    tone();
-    delay(BUZZER_SPEED);
-    noTone();
-    delay(BUZZER_SPEED);
-  }
-
-  int toneDeplay = 0;
-  bool toneOn = true;
-  tone(BUZZER_PIN, 1000);           // send 1kHz signal...
-  for (; pos >= CLOSE_POS; pos -= 1)
-  {
-    myservo.write(pos);
-    // generate sound
-    if(toneDeplay > BUZZER_SPEED)
-    {
-      // reset tone delay counter
-      toneDeplay = 0;
-      if(toneOn)
-      {
-        noTone();
-        toneOn=false;
-      }
-      else
-      {
-        tone();
-        toneOn=true;
-      }
-    }
-    toneDeplay+=GATE_SPEED;
-    delay(GATE_SPEED);
-  }
-
-  // fading out
-  for(i = 0; i < 2; i++)
-  {
-    tone();
-    delay(BUZZER_SPEED);
-    noTone();
-    delay(BUZZER_SPEED);
+    // if gate open or currently opening
+    case GS_OPEN:
+    case GS_OPENING:
+      // start closing it
+      Serial.println("gateState = GS_WARNING");
+      gateState = GS_WARNING;
+      break;
+    // otherwise, we are done
+    case GS_CLOSED:
+    case GS_WARNING:
+    case GS_CLOSING:
+      break;
+    default:
+      error();
   }
 }
+
+void error()
+{
+  Serial.println("ERROR!");  
+  digitalWrite(CROSSING_LED_1,HIGH);
+  digitalWrite(CROSSING_LED_2,HIGH);
+  while(true);  // loop of doom
+}
+
