@@ -12,21 +12,11 @@ In order to upload (download) the Arduino program code you most likely want to i
 
 ## Deployment
 
-Add additional notes about how to deploy this on a live system
+This project consists of several Arduino sketches that were part of the development process and typically consist of one specific component that, at the end would be used in the final work which is also sketch called *ConnectAllComponents*.
 
 ## Authors
 
 * **Michael Sommer** - [TU Ilmenau]
 * **Syed Muhammad Ali Azher** - [TU Ilmenau]
 
-See also the list of [contributors](https://github.com/your/project/contributors) who participated in this project.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
-
-## Acknowledgments
-
-* Hat tip to anyone who's code was used
-* Inspiration
-* etc
+See also the list of [contributors](https://github.com/m0zi/TUI_CES_railroadcrossing/graphs/contributors) who participated in this project.
