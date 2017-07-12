@@ -11,7 +11,7 @@ int const CROSSING_LED_1 = 11;
 int const CROSSING_LED_2 = 12;
 
 // gate speed constant: higher value = slower
-const int GATE_SPEED = 30;
+const int GATE_SPEED = 10;
 
 // buzzer beep speed: higher value = slower 
 const int BUZZER_SPEED = 250;
@@ -120,8 +120,9 @@ void loop() {
       // if one of the entering sensor is triggered
       if(sensor1Triggered || sensor4Triggered) 
       {
-        Serial.println("trainState = TS_ENTERED");
+        printSensors();
         trainState = TS_ENTERED;
+        printTrainState();
         close();
         break;
       }
@@ -136,33 +137,48 @@ void loop() {
       // if one of the inside sensor is triggered while the entering is still triggered
       if(sensor2Triggered && !sensor1Triggered || sensor3Triggered && !sensor4Triggered)
       {
-        Serial.println("trainState = TS_INSIDE");
+        printSensors();
         trainState = TS_INSIDE;
+        printTrainState();
         break;
       }
       // if neither of the entering sensor is triggered
       if(!sensor1Triggered && !sensor4Triggered)
       {
         // a train must have reversed and exited
-        Serial.println("trainState = TS_NO_TRAIN");
+        printSensors();
         trainState = TS_NO_TRAIN;
+        printTrainState();
         open();
+        break;
       }
       break;
     case TS_INSIDE:
-      if(sensor1Triggered || sensor4Triggered)
+      if(sensor1Triggered && !sensor2Triggered || !sensor3Triggered && sensor4Triggered)
       {
-        Serial.println("trainState = TS_LEAVING");
+        printSensors();
         trainState = TS_LEAVING;
+        printTrainState();
+        break;
       }
       break;
     case TS_LEAVING:
       // if nothing is triggered anymore
       if(!sensor1Triggered && !sensor2Triggered && !sensor3Triggered && !sensor4Triggered)
-      {
-        Serial.println("trainState = TS_NO_TRAIN");
+      {\
+        printSensors();
         trainState = TS_NO_TRAIN;
+        printTrainState();
         open();
+        break;
+      }
+      // if one of the inside sensor is triggered while the entering is still triggered
+      if(!sensor1Triggered && sensor2Triggered || sensor3Triggered && !sensor4Triggered)
+      {
+        printSensors();
+        trainState = TS_INSIDE;
+        printTrainState();
+        break;
       }
       break;
     default:
@@ -207,7 +223,7 @@ void loop() {
       else
       {
         gateState = GS_OPEN;
-        Serial.println("gateState = GS_OPEN");
+        printGateState();
       }
       break;
     case GS_WARNING:
@@ -228,10 +244,10 @@ void loop() {
         }
       }
       // ... not more than twice
-      if(warningCounter >= 2)
+      if(warningCounter >= 1)
       {
-        Serial.println("gateState = GS_CLOSING");
         gateState = GS_CLOSING;
+        printGateState();
         warningCounter = 0;
       }
       break;
@@ -261,8 +277,8 @@ void loop() {
       // gate in completely closed
       else
       {
-        Serial.println("gateState = GS_CLOSED");
         gateState = GS_CLOSED;
+        printGateState();
       }
       break;
     case GS_CLOSED:
@@ -321,8 +337,8 @@ void open()
     case GS_CLOSED:
     case GS_WARNING:
     case GS_CLOSING:
-      Serial.println("gateState = GS_OPENING");
       gateState = GS_OPENING;
+      printGateState();
       break;
     default:
       error();
@@ -337,8 +353,8 @@ void close()
     case GS_OPEN:
     case GS_OPENING:
       // start closing it
-      Serial.println("gateState = GS_WARNING");
       gateState = GS_WARNING;
+      printGateState();
       break;
     // otherwise, we are done
     case GS_CLOSED:
@@ -348,6 +364,74 @@ void close()
     default:
       error();
   }
+}
+
+void printSensors()
+{
+  /*
+  Serial.println("Sensors values: ");
+  Serial.print(sensor1);
+  Serial.print(" ");
+  Serial.print(sensor2);
+  Serial.print(" ");
+  Serial.print(sensor3);
+  Serial.print(" ");
+  Serial.print(sensor4);
+  Serial.println(" -");
+  //*/
+}
+
+void printTrainState()
+{
+  ///*
+  Serial.print("trainState = ");
+  switch (trainState)
+  {
+    case TS_NO_TRAIN:
+      Serial.println("TS_NO_TRAIN");
+      break;
+    case TS_ENTERED:
+      Serial.println("TS_ENTERED");
+      break;
+    case TS_INSIDE:
+      Serial.println("TS_INSIDE");
+      break;
+    case TS_LEAVING:
+      Serial.println("TS_LEAVING");
+      break;
+    default:
+      Serial.println("unknown");
+      break;
+  }
+  //*/
+}
+
+void printGateState()
+{
+  /*
+  Serial.print("gateState = ");
+  switch (gateState)
+  {
+    case GS_OPEN:
+      Serial.println("GS_OPEN");
+      break;
+    case GS_OPENING:
+      Serial.println("GS_OPENING");
+      break;
+    case GS_WARNING:
+      Serial.println("GS_WARNING");
+      break;
+    case GS_CLOSING:
+      Serial.println("GS_CLOSING");
+      break;
+    case GS_CLOSED:
+      Serial.println("GS_CLOSED");
+      break;
+    default:
+      Serial.println("unknown");
+      break;
+  }
+  //*/
 }
 
 void error()
